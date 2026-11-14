@@ -23,7 +23,6 @@ class MainActivity : AppCompatActivity() {
                     startActivity(intent)
                 } else {
                     startService(Intent(this@MainActivity, CapriOverlayService::class.java))
-                    Toast.class_invoke_safe_toast()
                     Toast.makeText(this@MainActivity, "Capri ativada!", Toast.LENGTH_SHORT).show()
                     finish()
                 }
