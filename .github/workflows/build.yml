@@ -12,11 +12,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Baixar sprite oficial da Capri
-        run: |
-          mkdir -p app/src/main/res/drawable
-          curl -L "https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png" -o app/src/main/res/drawable/capri_idle.png
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
