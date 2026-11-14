@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:id="@+id/txt_speech"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxWidth="220dp"
+        android:background="#14161F"
+        android:textColor="#00FFCC"
+        android:textSize="12sp"
+        android:fontFamily="monospace"
+        android:padding="8dp"
+        android:visibility="gone"
+        android:text="Sistema online!" />
+
+    <ImageView
+        android:id="@+id/img_capri"
+        android:layout_width="130dp"
+        android:layout_height="150dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/capri_idle" />
+
+    <LinearLayout
+        android:id="@+id/layout_chat"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#14161F"
+        android:padding="4dp"
+        android:visibility="gone">
+
+        <EditText
+            android:id="@+id/edt_pergunta"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Fale com a Capri..."
+            android:textColor="#FFFFFF"
+            android:textColorHint="#888888"
+            android:textSize="11sp"
+            android:background="@null"
+            android:padding="4dp" />
+
+        <Button
+            android:id="@+id/btn_enviar"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:text="OK"
+            android:textSize="10sp"
+            android:backgroundTint="#FF0055"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+</LinearLayout>
