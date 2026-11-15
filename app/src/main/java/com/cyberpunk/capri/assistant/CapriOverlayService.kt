@@ -54,6 +54,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     private var balaoVisivel = true
     private var spriteWidth = 260
     private var spriteHeight = 260
+    private var estaOuvindo = false
 
     private val GROQ_API_KEY = "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"
     private val TAVILY_API_KEY = "tvly-k3lPB-OZcaR05nyDmITrCOBgz4270luo4m5sTOcKe4885T4g"
@@ -63,6 +64,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
 
     private val historicoConversa = mutableListOf<Pair<String, String>>()
     private val handlerEspontaneo = Handler(Looper.getMainLooper())
+    private val handlerTimeoutMic = Handler(Looper.getMainLooper())
     private val intervaloEspontaneoMs = 240_000L
 
     companion object {
@@ -146,7 +148,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             setStroke(2, Color.parseColor("#05D9E8"))
         }
 
-        // Correção aplicada aqui: ScrollView limpo sem conflito de maxHeight no LayoutParams
         val scrollBalao = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(460, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
@@ -209,7 +210,13 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             textSize = 11f
             setPadding(18, 8, 18, 8)
             background = bgMic
-            setOnClickListener { iniciarEscutaVoz() }
+            setOnClickListener { 
+                if (estaOuvindo) {
+                    pararEscutaManual()
+                } else {
+                    iniciarEscutaVoz()
+                }
+            }
         }
         botoesLayout.addView(micButton)
 
@@ -243,7 +250,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         windowManager?.addView(container, params)
         overlayView = container
 
-        carregarImagemComFundoExternoTransparente("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
+        carregarImagemComFundosTransparentes("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
         handlerEspontaneo.postDelayed(tarefaConversaEspontanea, intervaloEspontaneoMs)
     }
 
@@ -332,44 +339,27 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {
+                    estaOuvindo = true
                     Handler(Looper.getMainLooper()).post {
-                        micButton.text = "🔴 Ouvindo..."
-                        speechBubble.text = "Ouvindo sua voz..."
+                        micButton.text = "🔴 Parar/Enviar"
+                        speechBubble.text = "Ouvindo... (Toque no mic para enviar)"
                     }
                 }
                 override fun onResults(results: Bundle?) {
-                    Handler(Looper.getMainLooper()).post {
-                        micButton.text = "🎙️ Falar"
-                    }
-                    val falas = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val textoFalado = falas?.firstOrNull()
-                    if (!textoFalado.isNullOrBlank()) {
-                        Handler(Looper.getMainLooper()).post {
-                            speechBubble.text = "Você: \"$textoFalado\""
-                        }
-                        val promptComContexto = if (contextoAtualTela.isNotBlank()) {
-                            "[Contexto: $appAtual] Usuário disse: $textoFalado"
-                        } else {
-                            textoFalado
-                        }
-                        pedirRespostaQwenComBusca(promptComContexto, ehProativo = false)
-                    }
+                    finalizarEscutaVozComSucesso(results)
                 }
                 override fun onError(error: Int) {
+                    estaOuvindo = false
+                    handlerTimeoutMic.removeCallbacksAndMessages(null)
                     Handler(Looper.getMainLooper()).post {
                         micButton.text = "🎙️ Falar"
-                        speechBubble.text = "Erro no microfone. Tente novamente."
+                        speechBubble.text = "Não captei direito, choom."
                     }
                 }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    Handler(Looper.getMainLooper()).post {
-                        micButton.text = "⏳ Pensando..."
-                        speechBubble.text = "Processando áudio..."
-                    }
-                }
+                override fun onEndOfSpeech() {}
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
@@ -386,17 +376,64 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     putExtra(RecognizerIntent.EXTRA_PROMPT, "Fale com a Capri...")
                 }
                 speechRecognizer?.startListening(intent)
-                micButton.text = "🔴 Ouvindo..."
+                estaOuvindo = true
+                micButton.text = "🔴 Parar/Enviar"
                 speechBubble.text = "Escutando..."
+
+                // Timeout de segurança de 3 segundos sem fala ou para forçar o encerramento automático
+                handlerTimeoutMic.removeCallbacksAndMessages(null)
+                handlerTimeoutMic.postDelayed({
+                    if (estaOuvindo) {
+                        pararEscutaManual()
+                    }
+                }, 3500L)
+
             } catch (e: Exception) {
                 e.printStackTrace()
+                estaOuvindo = false
                 micButton.text = "🎙️ Falar"
                 speechBubble.text = "Erro ao iniciar microfone."
             }
         }
     }
 
-    private fun carregarImagemComFundoExternoTransparente(linkUrl: String) {
+    private fun pararEscutaManual() {
+        try {
+            speechRecognizer?.stopListening()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        estaOuvindo = false
+        handlerTimeoutMic.removeCallbacksAndMessages(null)
+        Handler(Looper.getMainLooper()).post {
+            micButton.text = "⏳ Processando..."
+            speechBubble.text = "Processando áudio..."
+        }
+    }
+
+    private fun finalizarEscutaVozComSucesso(results: Bundle?) {
+        estaOuvindo = false
+        handlerTimeoutMic.removeCallbacksAndMessages(null)
+        Handler(Looper.getMainLooper()).post {
+            micButton.text = "🎙️ Falar"
+        }
+        val falas = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+        val textoFalado = falas?.firstOrNull()
+        if (!textoFalado.isNullOrBlank()) {
+            Handler(Looper.getMainLooper()).post {
+                speechBubble.text = "Você: \"$textoFalado\""
+            }
+            val promptComContexto = if (contextoAtualTela.isNotBlank()) {
+                "[Contexto: $appAtual] Usuário disse: $textoFalado"
+            } else {
+                textoFalado
+            }
+            pedirRespostaQwenComBusca(promptComContexto, ehProativo = false)
+        }
+    }
+
+    // Algoritmo robusto para varrer tanto as bordas quanto cavidades internas brancas (entre braços e pernas)
+    private fun carregarImagemComFundosTransparentes(linkUrl: String) {
         Thread {
             try {
                 val url = URL(linkUrl)
@@ -408,6 +445,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     val visited = Array(width) { BooleanArray(height) }
                     val queue: Queue<Pair<Int, Int>> = LinkedList()
 
+                    // 1. Inundação externa padrão (bordas)
                     for (x in 0 until width) {
                         verificarEAdicionarFila(bmp, x, 0, visited, queue)
                         verificarEAdicionarFila(bmp, x, height - 1, visited, queue)
@@ -415,6 +453,21 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     for (y in 0 until height) {
                         verificarEAdicionarFila(bmp, 0, y, visited, queue)
                         verificarEAdicionarFila(bmp, width - 1, y, visited, queue)
+                    }
+
+                    // 2. Inundação interna inteligente para cavidades brancas (entre braços, pernas e dobras)
+                    // Varre pontos estratégicos internos que cercam áreas brancas isoladas
+                    for (x in (width * 0.1).toInt()..(width * 0.9).toInt() step (width / 10).coerceAtLeast(1)) {
+                        for (y in (height * 0.1).toInt()..(height * 0.9).toInt() step (height / 10).coerceAtLeast(1)) {
+                            val pixel = bmp.getPixel(x, y)
+                            // Se encontrar um pixel branco cercado por áreas claras, testa se é uma cavidade interna
+                            if (Color.red(pixel) > 220 && Color.green(pixel) > 220 && Color.blue(pixel) > 220) {
+                                // Verifica se está numa zona interna que parece fundo preso
+                                if (esOcultoOuFundoInterno(bmp, x, y, width, height)) {
+                                    verificarEAdicionarFila(bmp, x, y, visited, queue)
+                                }
+                            }
+                        }
                     }
 
                     while (queue.isNotEmpty()) {
@@ -451,6 +504,25 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 queue.add(Pair(x, y))
             }
         }
+    }
+
+    private fun esOcultoOuFundoInterno(bmp: Bitmap, x: Int, y: Int, width: Int, height: Int): Boolean {
+        // Verifica se o pixel branco está isolado dentro de uma cavidade de fundo
+        var pixelsBrancosAoRedor = 0
+        val raio = 6
+        for (dx in -raio..raio step 3) {
+            for (dy in -raio..raio step 3) {
+                val nx = x + dx
+                val ny = y + dy
+                if (nx in 0 until width && ny in 0 until height) {
+                    val p = bmp.getPixel(nx, ny)
+                    if (Color.red(p) > 220 && Color.green(p) > 220 && Color.blue(p) > 220) {
+                        pixelsBrancosAoRedor++
+                    }
+                }
+            }
+        }
+        return pixelsBrancosAoRedor > 12
     }
 
     private fun pesquisarNoTavily(query: String): String {
@@ -563,7 +635,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                         falar(conteudoResposta)
                     }
                 } else if (!ehProativo) {
-                    Handler(Looper.getMainLooper()).post {
+                    Handler(Looper.getMainLocate()).post {
                         falar("Erro na conexão com a Groq.")
                     }
                 }
@@ -601,6 +673,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         super.onDestroy()
         instancia = null
         handlerEspontaneo.removeCallbacks(tarefaConversaEspontanea)
+        handlerTimeoutMic.removeCallbacksAndMessages(null)
         speechRecognizer?.destroy()
         tts?.stop()
         tts?.shutdown()
