@@ -58,8 +58,8 @@ class CapriOverlayService : Service() {
     private var spriteHeight = 260
     private var estaOuvindo = false
 
-    private val GROQ_API_KEY = "TUA_CHAVE_DA_GROQ_AQUI"
-    private val TAVILY_API_KEY = "TUA_CHAVE_DO_TAVILY_AQUI"
+    private val GROQ_API_KEY = "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"
+    private val TAVILY_API_KEY = "tvly-k3lPB-OZcaR05nyDmITrCOBgz4270luo4m5sTOcKe4885T4g"
     
     private val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
     private val TAVILY_URL = "https://api.tavily.com/search"
