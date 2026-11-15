@@ -15,7 +15,6 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -25,20 +24,26 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Calendar
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
+class CapriOverlayService : Service() {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
-    private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private lateinit var scaleGestureDetector: ScaleGestureDetector
     
@@ -58,6 +63,13 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     
     private val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
     private val TAVILY_URL = "https://api.tavily.com/search"
+
+    // Cliente HTTP para chamadas assíncronas ao Colab (RVC) e à Groq
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
+    private var mediaPlayer: android.media.MediaPlayer? = null
 
     private val historicoConversa = mutableListOf<Pair<String, String>>()
     private val handlerEspontaneo = Handler(Looper.getMainLooper())
@@ -107,7 +119,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         carregarHistoricoLocal()
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        tts = TextToSpeech(this, this)
         configurarReconhecimentoVoz()
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -128,10 +139,12 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             y = 180
         }
 
+        // 1. CONTAINER PRINCIPAL TOTALMENTE TRANSPARENTE (fundo da imagem some por completo)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(8, 8, 8, 8)
+            setBackgroundColor(Color.TRANSPARENT)
+            setPadding(12, 12, 12, 12)
         }
 
         bubbleContainer = LinearLayout(this).apply {
@@ -139,10 +152,11 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             gravity = Gravity.END
         }
 
+        // 2. Balão de texto com fundo translúcido escuro e borda neon para leitura limpa
         val bgBalao = GradientDrawable().apply {
-            setColor(Color.parseColor("#F00D0D15"))
+            setColor(Color.parseColor("#B30A0A0F")) // Preto translúcido (70%)
             cornerRadius = 24f
-            setStroke(2, Color.parseColor("#05D9E8"))
+            setStroke(2, Color.parseColor("#05D9E8")) // Borda Ciano Arasaka
         }
 
         val scrollBalao = ScrollView(this).apply {
@@ -150,7 +164,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         }
 
         speechBubble = TextView(this).apply {
-            text = "Conectada."
+            text = "Conectada à rede."
             setTextColor(Color.parseColor("#F0F8FF"))
             textSize = 13f
             setPadding(22, 16, 22, 16)
@@ -165,6 +179,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         bubbleContainer.addView(balaoCard)
         container.addView(bubbleContainer)
 
+        // 3. Imagem / Sprite da Capri sem nenhum fundo sólido
         spriteView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(spriteWidth, spriteHeight).apply {
                 topMargin = 6
@@ -192,6 +207,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         configurarToqueEArrasto(spriteView, params)
         container.addView(spriteView)
 
+        // 4. Botões de ação flutuantes
         val botoesLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -249,6 +265,9 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
 
         carregarImagemSimples("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
         handlerEspontaneo.postDelayed(tarefaConversaEspontanea, intervaloEspontaneoMs)
+        
+        // Saudação inicial com a voz da Capri via Colab ao ligar o overlay
+        falar("Sistemas operacionais ativados, choom.")
     }
 
     private fun salvarHistoricoLocal() {
@@ -364,7 +383,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun iniciarEscutaVoz() {
-        tts?.stop()
         Handler(Looper.getMainLooper()).post {
             try {
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -487,7 +505,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     }
 
     fun pedirRespostaQwenComBusca(mensagemUsuario: String, ehProativo: Boolean) {
-        if (ehProativo && tts?.isSpeaking == true) return
+        if (ehProativo) return
 
         Handler(Looper.getMainLooper()).post {
             speechBubble.text = "Pensando..."
@@ -571,23 +589,92 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         }.start()
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val result = tts?.setLanguage(Locale("pt", "BR"))
-            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                val saudacao = if (historicoConversa.isNotEmpty()) {
-                    "Na escuta, choom."
-                } else {
-                    "Engrama ativo. Pronto para conectar."
-                }
-                pedirRespostaQwenComBusca(saudacao, ehProativo = true)
-            }
+    // 🎙️ Processamento e conversão de áudio com a voz RVC da Capri no Colab
+    private fun falar(texto: String) {
+        Handler(Looper.getMainLooper()).post {
+            speechBubble.text = texto
         }
+
+        val baseUrl = MainActivity.obterUrl(this)
+        val endpointApi = "$baseUrl/api/predict"
+
+        val dataArray = JSONArray().apply {
+            put(texto)
+            put("pt-BR-FranciscaNeural")
+            put(0)
+            put("Capri_10e_30s.pth")
+            put("Capri.index")
+            put(0.75)
+            put("rmvpe")
+        }
+
+        val jsonBody = JSONObject().apply {
+            put("data", dataArray)
+        }
+
+        val requestBody = jsonBody.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+        val request = Request.Builder().url(endpointApi).post(requestBody).build()
+
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                Handler(Looper.getMainLooper()).post {
+                    speechBubble.text = "$texto\n(Erro RVC: Colab offline)"
+                }
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                if (!response.isSuccessful) {
+                    Handler(Looper.getMainLooper()).post {
+                        speechBubble.text = "$texto\n(Link do Gradio expirado ou inválido!)"
+                    }
+                    return
+                }
+
+                try {
+                    val respostaString = response.body?.string() ?: return
+                    val jsonResposta = JSONObject(respostaString)
+                    val dataRetorno = jsonResposta.getJSONArray("data")
+                    val primeiroItem = dataRetorno.get(0)
+                    val caminhoAudioRemoto = if (primeiroItem is JSONObject) {
+                        primeiroItem.getString("name")
+                    } else {
+                        primeiroItem.toString()
+                    }
+
+                    val urlDownloadAudio = "$baseUrl/file=$caminhoAudioRemoto"
+                    descarregarETocarAudio(urlDownloadAudio)
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        })
     }
 
-    private fun falar(texto: String) {
-        speechBubble.text = texto
-        tts?.speak(texto, TextToSpeech.QUEUE_FLUSH, null, null)
+    private fun descarregarETocarAudio(urlAudio: String) {
+        val requestAudio = Request.Builder().url(urlAudio).build()
+        client.newCall(requestAudio).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+
+            override fun onResponse(call: Call, response: Response) {
+                val bytesAudio = response.body?.bytes() ?: return
+                try {
+                    val arquivoTemp = File(cacheDir, "fala_capri.wav")
+                    FileOutputStream(arquivoTemp).use { it.write(bytesAudio) }
+
+                    Handler(Looper.getMainLooper()).post {
+                        mediaPlayer?.release()
+                        mediaPlayer = android.media.MediaPlayer().apply {
+                            setDataSource(arquivoTemp.absolutePath)
+                            prepare()
+                            start()
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        })
     }
 
     override fun onDestroy() {
@@ -596,8 +683,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         handlerEspontaneo.removeCallbacks(tarefaConversaEspontanea)
         handlerTimeoutMic.removeCallbacksAndMessages(null)
         speechRecognizer?.destroy()
-        tts?.stop()
-        tts?.shutdown()
+        mediaPlayer?.release()
         if (overlayView != null) {
             windowManager?.removeView(overlayView)
         }
