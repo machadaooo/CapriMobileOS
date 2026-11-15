@@ -56,6 +56,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     private var spriteHeight = 260
     private var estaOuvindo = false
 
+    // INSIRA AS SUAS CHAVES REAIS AQUI
     private val GROQ_API_KEY = "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"
     private val TAVILY_API_KEY = "tvly-k3lPB-OZcaR05nyDmITrCOBgz4270luo4m5sTOcKe4885T4g"
     
@@ -380,7 +381,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 micButton.text = "🔴 Parar/Enviar"
                 speechBubble.text = "Escutando..."
 
-                // Timeout de segurança de 3 segundos sem fala ou para forçar o encerramento automático
                 handlerTimeoutMic.removeCallbacksAndMessages(null)
                 handlerTimeoutMic.postDelayed({
                     if (estaOuvindo) {
@@ -432,7 +432,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    // Algoritmo robusto para varrer tanto as bordas quanto cavidades internas brancas (entre braços e pernas)
     private fun carregarImagemComFundosTransparentes(linkUrl: String) {
         Thread {
             try {
@@ -445,7 +444,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     val visited = Array(width) { BooleanArray(height) }
                     val queue: Queue<Pair<Int, Int>> = LinkedList()
 
-                    // 1. Inundação externa padrão (bordas)
                     for (x in 0 until width) {
                         verificarEAdicionarFila(bmp, x, 0, visited, queue)
                         verificarEAdicionarFila(bmp, x, height - 1, visited, queue)
@@ -455,14 +453,10 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                         verificarEAdicionarFila(bmp, width - 1, y, visited, queue)
                     }
 
-                    // 2. Inundação interna inteligente para cavidades brancas (entre braços, pernas e dobras)
-                    // Varre pontos estratégicos internos que cercam áreas brancas isoladas
                     for (x in (width * 0.1).toInt()..(width * 0.9).toInt() step (width / 10).coerceAtLeast(1)) {
                         for (y in (height * 0.1).toInt()..(height * 0.9).toInt() step (height / 10).coerceAtLeast(1)) {
                             val pixel = bmp.getPixel(x, y)
-                            // Se encontrar um pixel branco cercado por áreas claras, testa se é uma cavidade interna
                             if (Color.red(pixel) > 220 && Color.green(pixel) > 220 && Color.blue(pixel) > 220) {
-                                // Verifica se está numa zona interna que parece fundo preso
                                 if (esOcultoOuFundoInterno(bmp, x, y, width, height)) {
                                     verificarEAdicionarFila(bmp, x, y, visited, queue)
                                 }
@@ -507,7 +501,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun esOcultoOuFundoInterno(bmp: Bitmap, x: Int, y: Int, width: Int, height: Int): Boolean {
-        // Verifica se o pixel branco está isolado dentro de uma cavidade de fundo
         var pixelsBrancosAoRedor = 0
         val raio = 6
         for (dx in -raio..raio step 3) {
@@ -635,7 +628,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                         falar(conteudoResposta)
                     }
                 } else if (!ehProativo) {
-                    Handler(Looper.getMainLocate()).post {
+                    Handler(Looper.getMainLooper()).post {
                         falar("Erro na conexão com a Groq.")
                     }
                 }
