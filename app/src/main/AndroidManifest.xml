@@ -8,9 +8,7 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
         android:label="Capricorn"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
@@ -24,7 +22,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Serviço Flutuante da Capri (Visual, Voz, Microfone, Memória Local e IA Qwen) -->
+        <!-- Serviço Flutuante da Capri (Visual, Voz, Microfone, Memória Local, Tavily e IA Qwen) -->
         <service
             android:name=".CapriOverlayService"
             android:exported="false" />
