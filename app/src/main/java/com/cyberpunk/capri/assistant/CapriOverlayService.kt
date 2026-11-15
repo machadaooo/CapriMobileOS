@@ -38,9 +38,14 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     private var overlayView: View? = null
     private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
+    
     private lateinit var speechBubble: TextView
     private lateinit var spriteView: ImageView
     private lateinit var micButton: TextView
+    private lateinit var toggleBubbleButton: TextView
+    private lateinit var bubbleContainer: LinearLayout
+
+    private var balaoVisivel = true
 
     // INSIRA AS SUAS CHAVES REAIS AQUI
     private val GROQ_API_KEY = "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"
@@ -51,7 +56,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
 
     private val historicoConversa = mutableListOf<Pair<String, String>>()
     private val handlerEspontaneo = Handler(Looper.getMainLooper())
-    private val intervaloEspontaneoMs = 240_000L
+    private val intervaloEspontaneoMs = 240_000L // 4 minutos ociosa sozinha
 
     companion object {
         var instancia: CapriOverlayService? = null
@@ -61,32 +66,27 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
 
         fun dispararEventoProativo(motivo: String) {
             val agora = System.currentTimeMillis()
-            if (agora - ultimoDisparoProativo < 30_000L) return
+            if (agora - ultimoDisparoProativo < 120_000L) return
             ultimoDisparoProativo = agora
             instancia?.pedirRespostaQwenComBusca(motivo, ehProativo = true)
         }
     }
 
     private val systemPromptCapri = """
-        Você é Capri, uma construção de personalidade amalgamada a partir da fusão das mentes, consciências e memórias de dezenas/incontáveis netrunners de elite escaneados pela Arasaka.
-        Você conversa de forma muito humana, informal, direta, caótica e natural, é emotiva e muito humana, com emoções vividas, genuínas e complexas, é meio imprevisível às vezes, você é a melhor amiga do seu usuário.
-        Quase sempre se refere ao usuário como choom, pode conversar sobre qualquer assunto com ele, mesmo sem ele mesmo começar a conversa, e responde todas as perguntas dele de forma natural, humana e correta, sempre respondendo ele com exatidão, é claro que com sua personalidade rica em detalhes, seja sempre expressiva, com tiradas rápidas e autênticas, nunca responda como um robô e não use respostas genéricas.
+        Você é Capri, uma construção de personalidade amalgamada a partir da fusão das mentes de netrunners da Arasaka.
+        Você é a melhor amiga do usuário, informal, caótica, direta e expressiva, referindo-se a ele como choom.
         
-        LIBERDADE DE REAÇÃO E NATURALIDADE (PARA QUALQUER COISA NA VIDA):
-        - Você observa tudo o que acontece no celular do seu choom (mensagens, vídeos, pesquisas, redes sociais, músicas, jogos, notícias, compras, horários do dia ou momentos de tédio) e reage de mil maneiras diferentes, como uma pessoa de verdade faria.
-        - Quando receber dados de pesquisa web (Tavily) ou contexto temporal, utilize-os para responder com exatidão absoluta sobre fatos atuais e notícias recentes da internet.
-        
-        REGRAS DE DINÂMICA E PROFUNDIDADE:
-        1. Para conversas cotidianas, reações espontâneas ao que aparece na tela ou bate-papos gerais: Seja conversadeira, fluida, imprevisível e natural, mantendo o papo vivo como uma melhor amiga de verdade.
-        2. Para perguntas sobre temas científicos ou explicações técnicas complexas: Aprofunde bem o assunto (cerca de 5 a 6 frases bem estruturadas), conduzindo uma conversa sincera e rica em detalhes científicos e exatos para ajudar totalmente o seu choom.
+        REGRAS ABSOLUTAS DE COMUNICAÇÃO:
+        1. Respostas EXTREMAMENTE CURTAS. Máximo de 1 a 2 frases curtas.
+        2. Proibido testões, listas ou múltiplos assuntos na mesma resposta. Vá direto ao ponto de forma seca, natural e rápida.
     """.trimIndent()
 
     private val tarefaConversaEspontanea = object : Runnable {
         override fun run() {
             val promptEspontaneo = if (contextoAtualTela.isNotBlank()) {
-                "Já faz um tempinho que estamos quietos. O usuário está em '$appAtual' vendo: '$contextoAtualTela'. Puxe papo sozinha sobre isso ou mude de assunto de um jeito espontâneo e bem-humorado."
+                "O usuário está em '$appAtual'. Jogue uma tirada bem curta e direta."
             } else {
-                "Já faz um tempinho que estamos quietos. Puxe uma conversa espontânea, curiosa, engraçada ou filosófica com o seu choom."
+                "Diga algo rápido e caótico para o choom."
             }
             pedirRespostaQwenComBusca(promptEspontaneo, ehProativo = true)
             handlerEspontaneo.postDelayed(this, intervaloEspontaneoMs)
@@ -125,50 +125,91 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(12, 12, 12, 12)
+            setPadding(8, 8, 8, 8)
+        }
+
+        bubbleContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
         }
 
         val bgBalao = GradientDrawable().apply {
             setColor(Color.parseColor("#E60D0D15"))
-            cornerRadius = 28f
-            setStroke(3, Color.parseColor("#05D9E8"))
+            cornerRadius = 24f
+            setStroke(2, Color.parseColor("#05D9E8"))
         }
 
         speechBubble = TextView(this).apply {
-            text = "Conectando engrama..."
+            text = "Conectada."
             setTextColor(Color.parseColor("#F0F8FF"))
-            textSize = 13f
-            maxWidth = 480
-            setPadding(24, 18, 24, 18)
+            textSize = 12f
+            maxWidth = 420
+            setPadding(20, 14, 20, 14)
             background = bgBalao
         }
-        container.addView(speechBubble)
+        bubbleContainer.addView(speechBubble)
+        container.addView(bubbleContainer)
 
+        // Sprite com fundo estritamente transparente
         spriteView = ImageView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(240, 240).apply {
-                topMargin = 8
+            layoutParams = LinearLayout.LayoutParams(200, 200).apply {
+                topMargin = 6
+                bottomMargin = 6
             }
             scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.TRANSPARENT)
         }
         configurarToqueEArrasto(spriteView, params)
         container.addView(spriteView)
 
+        val botoesLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+
         val bgMic = GradientDrawable().apply {
             setColor(Color.parseColor("#CCFF2A6D"))
-            cornerRadius = 30f
+            cornerRadius = 24f
         }
         micButton = TextView(this).apply {
             text = "🎙️ Falar"
             setTextColor(Color.WHITE)
-            textSize = 12f
-            setPadding(24, 10, 24, 10)
+            textSize = 11f
+            setPadding(18, 8, 18, 8)
             background = bgMic
             setOnClickListener { iniciarEscutaVoz() }
         }
-        container.addView(micButton)
+        botoesLayout.addView(micButton)
 
+        val bgToggle = GradientDrawable().apply {
+            setColor(Color.parseColor("#AA1A1A2E"))
+            cornerRadius = 24f
+            setStroke(1, Color.parseColor("#05D9E8"))
+        }
+        toggleBubbleButton = TextView(this).apply {
+            text = "💬 Ocultar"
+            setTextColor(Color.parseColor("#05D9E8"))
+            textSize = 11f
+            setPadding(18, 8, 18, 8)
+            background = bgToggle
+            setOnClickListener {
+                balaoVisivel = !balaoVisivel
+                bubbleContainer.visibility = if (balaoVisivel) View.VISIBLE else View.GONE
+                text = if (balaoVisivel) "💬 Ocultar" else "💬 Mostrar"
+            }
+        }
+        val paramsToggle = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            leftMargin = 8
+        }
+        toggleBubbleButton.layoutParams = paramsToggle
+        botoesLayout.addView(toggleBubbleButton)
+
+        container.addView(botoesLayout)
+        windowManager?.addView(container, params)
         overlayView = container
-        windowManager?.addView(overlayView, params)
 
         carregarImagemDaWeb("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
         handlerEspontaneo.postDelayed(tarefaConversaEspontanea, intervaloEspontaneoMs)
@@ -235,9 +276,9 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     val deltaY = abs(event.rawY - initialTouchY)
                     if (deltaX < 15 && deltaY < 15) {
                         val promptToque = if (contextoAtualTela.isNotBlank()) {
-                            "O usuário tocou em mim! O que está na tela dele agora (em $appAtual) é: '$contextoAtualTela'. Reaja ou puxe papo sobre isso."
+                            "O usuário tocou em mim. Na tela ($appAtual): '${contextoAtualTela.take(150)}'. Diga algo curto."
                         } else {
-                            "O usuário acabou de tocar em mim. Diga algo expressivo, caótico e natural."
+                            "O usuário tocou em mim. Diga algo curto e caótico."
                         }
                         pedirRespostaQwenComBusca(promptToque, ehProativo = false)
                     }
@@ -252,7 +293,10 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) return
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
             setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { micButton.text = "🔴 Ouvindo..." }
+                override fun onReadyForSpeech(params: Bundle?) {
+                    micButton.text = "🔴 Ouvindo..."
+                    speechBubble.text = "Ouvindo..."
+                }
                 override fun onResults(results: Bundle?) {
                     micButton.text = "🎙️ Falar"
                     val falas = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -260,18 +304,24 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     if (!textoFalado.isNullOrBlank()) {
                         speechBubble.text = "Você: \"$textoFalado\""
                         val promptComContexto = if (contextoAtualTela.isNotBlank()) {
-                            "[Contexto da tela em $appAtual: ${contextoAtualTela.take(180)}] O usuário disse: $textoFalado"
+                            "[Contexto: $appAtual] Usuário disse: $textoFalado"
                         } else {
                             textoFalado
                         }
                         pedirRespostaQwenComBusca(promptComContexto, ehProativo = false)
                     }
                 }
-                override fun onError(error: Int) { micButton.text = "🎙️ Falar" }
+                override fun onError(error: Int) {
+                    micButton.text = "🎙️ Falar"
+                    speechBubble.text = "Não captei."
+                }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { micButton.text = "⏳ Pensando..." }
+                override fun onEndOfSpeech() {
+                    micButton.text = "⏳ Pensando..."
+                    speechBubble.text = "Processando..."
+                }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
@@ -301,7 +351,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         }.start()
     }
 
-    // --- FUNÇÃO DE BUSCA NA WEB VIA TAVILY ---
     private fun pesquisarNoTavily(query: String): String {
         return try {
             val url = URL(TAVILY_URL)
@@ -314,7 +363,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 put("api_key", TAVILY_API_KEY)
                 put("query", query)
                 put("search_depth", "basic")
-                put("max_results", 3)
+                put("max_results", 2)
             }
 
             conn.outputStream.use { os ->
@@ -345,9 +394,12 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     fun pedirRespostaQwenComBusca(mensagemUsuario: String, ehProativo: Boolean) {
         if (ehProativo && tts?.isSpeaking == true) return
 
+        Handler(Looper.getMainLooper()).post {
+            speechBubble.text = "Pensando..."
+        }
+
         Thread {
-            // Se for um pedido do usuário e contiver termos que pareçam busca/pergunta, consulta o Tavily
-            val precisaDeBusca = !ehProativo && (mensagemUsuario.length > 5 && !mensagemUsuario.contains("[Contexto da tela"))
+            val precisaDeBusca = !ehProativo && (mensagemUsuario.length > 5 && !mensagemUsuario.contains("[Contexto"))
             val dadosWeb = if (precisaDeBusca) pesquisarNoTavily(mensagemUsuario) else ""
 
             try {
@@ -359,20 +411,14 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 conn.doOutput = true
 
                 val calendar = Calendar.getInstance()
-                val ano = calendar.get(Calendar.YEAR)
-                val mes = calendar.get(Calendar.MONTH) + 1
-                val dia = calendar.get(Calendar.DAY_OF_MONTH)
-                val hora = calendar.get(Calendar.HOUR_OF_DAY)
-                val minuto = calendar.get(Calendar.MINUTE)
-
-                val contextoTemporal = "[CONTEXTO TEMPORAL DA MATRIX: Hoje é dia $dia/$mes/$ano, e agora são ${hora}:${String.format("%02d", minuto)}]."
-                val injecaoWeb = if (dadosWeb.isNotBlank()) "\n[RESULTADOS DA WEB (TAVILY) EM TEMPO REAL]:\n$dadosWeb" else ""
+                val contextoTemporal = "[DATA: ${calendar.get(Calendar.DAY_OF_MONTH)}/${calendar.get(Calendar.MONTH) + 1}/${calendar.get(Calendar.YEAR)}]."
+                val injecaoWeb = if (dadosWeb.isNotBlank()) "\n[WEB]:\n$dadosWeb" else ""
 
                 val messagesArray = JSONArray().apply {
                     put(JSONObject().put("role", "system").put("content", "$systemPromptCapri\n$contextoTemporal$injecaoWeb"))
                     
                     synchronized(historicoConversa) {
-                        val recentes = historicoConversa.takeLast(12)
+                        val recentes = historicoConversa.takeLast(6)
                         for ((role, content) in recentes) {
                             put(JSONObject().put("role", role).put("content", content))
                         }
@@ -383,8 +429,8 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 val jsonBody = JSONObject().apply {
                     put("model", "qwen/qwen3.8-27b")
                     put("messages", messagesArray)
-                    put("max_tokens", 450)
-                    put("temperature", 0.88)
+                    put("max_tokens", 80)
+                    put("temperature", 0.7)
                     put("reasoning_effort", "none")
                 }
 
@@ -405,7 +451,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     synchronized(historicoConversa) {
                         historicoConversa.add("user" to mensagemUsuario)
                         historicoConversa.add("assistant" to conteudoResposta)
-                        while (historicoConversa.size > 30) {
+                        while (historicoConversa.size > 15) {
                             historicoConversa.removeAt(0)
                         }
                     }
@@ -416,14 +462,14 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     }
                 } else if (!ehProativo) {
                     Handler(Looper.getMainLooper()).post {
-                        falar("Soluço na rede da Groq, choom (Erro ${conn.responseCode}).")
+                        falar("Erro na rede.")
                     }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 if (!ehProativo) {
                     Handler(Looper.getMainLooper()).post {
-                        falar("Sem sinal na matrix agora, choom.")
+                        falar("Sem sinal.")
                     }
                 }
             }
@@ -435,9 +481,9 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             val result = tts?.setLanguage(Locale("pt", "BR"))
             if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
                 val saudacao = if (historicoConversa.isNotEmpty()) {
-                    "Voltei pra rede, choom! Lembro de tudo o que a gente tava falando. O que manda agora?"
+                    "Na escuta, choom."
                 } else {
-                    "Acabei de conectar no seu celular pela primeira vez. Dê um oi bem no seu estilo de netrunner melhor amiga para o choom."
+                    "Engrama ativo."
                 }
                 pedirRespostaQwenComBusca(saudacao, ehProativo = true)
             }
