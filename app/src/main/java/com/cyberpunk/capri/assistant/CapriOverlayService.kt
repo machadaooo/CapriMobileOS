@@ -55,7 +55,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     private var spriteWidth = 260
     private var spriteHeight = 260
 
-    // INSIRA AS SUAS CHAVES REAIS AQUI
     private val GROQ_API_KEY = "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"
     private val TAVILY_API_KEY = "tvly-k3lPB-OZcaR05nyDmITrCOBgz4270luo4m5sTOcKe4885T4g"
     
@@ -147,10 +146,9 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
             setStroke(2, Color.parseColor("#05D9E8"))
         }
 
+        // Correção aplicada aqui: ScrollView limpo sem conflito de maxHeight no LayoutParams
         val scrollBalao = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(460, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                maxHeight = 320
-            }
+            layoutParams = LinearLayout.LayoutParams(460, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
 
         speechBubble = TextView(this).apply {
@@ -467,7 +465,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 put("api_key", TAVILY_API_KEY)
                 put("query", query)
                 put("search_depth", "basic")
-                put("max_results", 3)
+                put("max_results", 2)
             }
 
             conn.outputStream.use { os ->
@@ -611,4 +609,3 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         }
     }
 }
-                        
