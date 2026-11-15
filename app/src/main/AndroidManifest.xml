@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="true"
-        android:label="CapriMobileOS"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Capricorn"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
+        <!-- Capa / Tela Inicial do App -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -18,9 +24,24 @@
             </intent-filter>
         </activity>
 
+        <!-- Serviço Flutuante da Capri (Visual, Voz, Microfone, Memória Local e IA Qwen) -->
         <service
             android:name=".CapriOverlayService"
             android:exported="false" />
 
+        <!-- Serviço de Acessibilidade (Olhos da Capri na Tela, Apps, Sites e Jogos) -->
+        <service
+            android:name=".CapriAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
     </application>
+
 </manifest>
