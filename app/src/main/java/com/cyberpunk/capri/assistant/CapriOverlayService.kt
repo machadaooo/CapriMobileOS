@@ -3,7 +3,6 @@ package com.cyberpunk.capri.assistant
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -34,8 +33,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Calendar
 import java.util.Locale
-import java.util.LinkedList
-import java.util.Queue
 import kotlin.math.abs
 
 class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
@@ -56,9 +53,8 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
     private var spriteHeight = 260
     private var estaOuvindo = false
 
-    // INSIRA AS SUAS CHAVES REAIS AQUI
-    private val GROQ_API_KEY = "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"
-    private val TAVILY_API_KEY = "tvly-k3lPB-OZcaR05nyDmITrCOBgz4270luo4m5sTOcKe4885T4g"
+    private val GROQ_API_KEY = "TUA_CHAVE_DA_GROQ_AQUI"
+    private val TAVILY_API_KEY = "TUA_CHAVE_DO_TAVILY_AQUI"
     
     private val GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
     private val TAVILY_URL = "https://api.tavily.com/search"
@@ -251,7 +247,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         windowManager?.addView(container, params)
         overlayView = container
 
-        carregarImagemComFundosTransparentes("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
+        carregarImagemSimples("https://instasize.com/api/image/0899247ed8e07e211a35dfce92025a1b926e7d339775d7a2ec3f230a57cd852a.png")
         handlerEspontaneo.postDelayed(tarefaConversaEspontanea, intervaloEspontaneoMs)
     }
 
@@ -343,7 +339,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     estaOuvindo = true
                     Handler(Looper.getMainLooper()).post {
                         micButton.text = "🔴 Parar/Enviar"
-                        speechBubble.text = "Ouvindo... (Toque no mic para enviar)"
+                        speechBubble.text = "Ouvindo... (Toque para enviar)"
                     }
                 }
                 override fun onResults(results: Bundle?) {
@@ -354,7 +350,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                     handlerTimeoutMic.removeCallbacksAndMessages(null)
                     Handler(Looper.getMainLooper()).post {
                         micButton.text = "🎙️ Falar"
-                        speechBubble.text = "Não captei direito, choom."
+                        speechBubble.text = "Não captei, choom. Tente de novo."
                     }
                 }
                 override fun onBeginningOfSpeech() {}
@@ -406,7 +402,7 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
         estaOuvindo = false
         handlerTimeoutMic.removeCallbacksAndMessages(null)
         Handler(Looper.getMainLooper()).post {
-            micButton.text = "⏳ Processando..."
+            micButton.text = "🎙️ Falar"
             speechBubble.text = "Processando áudio..."
         }
     }
@@ -429,58 +425,18 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 textoFalado
             }
             pedirRespostaQwenComBusca(promptComContexto, ehProativo = false)
+        } else {
+            speechBubble.text = "Não ouvi nada, choom."
         }
     }
 
-    private fun carregarImagemComFundosTransparentes(linkUrl: String) {
+    private fun carregarImagemSimples(linkUrl: String) {
         Thread {
             try {
                 val url = URL(linkUrl)
-                val bmpOriginal = BitmapFactory.decodeStream(url.openConnection().getInputStream())
-                if (bmpOriginal != null) {
-                    val bmp = bmpOriginal.copy(Bitmap.Config.ARGB_8888, true)
-                    val width = bmp.width
-                    val height = bmp.height
-                    val visited = Array(width) { BooleanArray(height) }
-                    val queue: Queue<Pair<Int, Int>> = LinkedList()
-
-                    for (x in 0 until width) {
-                        verificarEAdicionarFila(bmp, x, 0, visited, queue)
-                        verificarEAdicionarFila(bmp, x, height - 1, visited, queue)
-                    }
-                    for (y in 0 until height) {
-                        verificarEAdicionarFila(bmp, 0, y, visited, queue)
-                        verificarEAdicionarFila(bmp, width - 1, y, visited, queue)
-                    }
-
-                    for (x in (width * 0.1).toInt()..(width * 0.9).toInt() step (width / 10).coerceAtLeast(1)) {
-                        for (y in (height * 0.1).toInt()..(height * 0.9).toInt() step (height / 10).coerceAtLeast(1)) {
-                            val pixel = bmp.getPixel(x, y)
-                            if (Color.red(pixel) > 220 && Color.green(pixel) > 220 && Color.blue(pixel) > 220) {
-                                if (esOcultoOuFundoInterno(bmp, x, y, width, height)) {
-                                    verificarEAdicionarFila(bmp, x, y, visited, queue)
-                                }
-                            }
-                        }
-                    }
-
-                    while (queue.isNotEmpty()) {
-                        val (cx, cy) = queue.poll()!!
-                        bmp.setPixel(cx, cy, Color.TRANSPARENT)
-
-                        val vizinhos = listOf(Pair(cx + 1, cy), Pair(cx - 1, cy), Pair(cx, cy + 1), Pair(cx, cy - 1))
-                        for ((nx, ny) in vizinhos) {
-                            if (nx in 0 until width && ny in 0 until height && !visited[nx][ny]) {
-                                val pixel = bmp.getPixel(nx, ny)
-                                if (Color.red(pixel) > 220 && Color.green(pixel) > 220 && Color.blue(pixel) > 220) {
-                                    visited[nx][ny] = true
-                                    queue.add(Pair(nx, ny))
-                                }
-                            }
-                        }
-                    }
-
-                    Handler(Looper.getMainLooper()).post {
+                val bmp = BitmapFactory.decodeStream(url.openConnection().getInputStream())
+                Handler(Looper.getMainLooper()).post {
+                    if (bmp != null) {
                         spriteView.setImageBitmap(bmp)
                     }
                 }
@@ -488,34 +444,6 @@ class CapriOverlayService : Service(), TextToSpeech.OnInitListener {
                 e.printStackTrace()
             }
         }.start()
-    }
-
-    private fun verificarEAdicionarFila(bmp: Bitmap, x: Int, y: Int, visited: Array<BooleanArray>, queue: Queue<Pair<Int, Int>>) {
-        if (!visited[x][y]) {
-            visited[x][y] = true
-            val pixel = bmp.getPixel(x, y)
-            if (Color.red(pixel) > 220 && Color.green(pixel) > 220 && Color.blue(pixel) > 220) {
-                queue.add(Pair(x, y))
-            }
-        }
-    }
-
-    private fun esOcultoOuFundoInterno(bmp: Bitmap, x: Int, y: Int, width: Int, height: Int): Boolean {
-        var pixelsBrancosAoRedor = 0
-        val raio = 6
-        for (dx in -raio..raio step 3) {
-            for (dy in -raio..raio step 3) {
-                val nx = x + dx
-                val ny = y + dy
-                if (nx in 0 until width && ny in 0 until height) {
-                    val p = bmp.getPixel(nx, ny)
-                    if (Color.red(p) > 220 && Color.green(p) > 220 && Color.blue(p) > 220) {
-                        pixelsBrancosAoRedor++
-                    }
-                }
-            }
-        }
-        return pixelsBrancosAoRedor > 12
     }
 
     private fun pesquisarNoTavily(query: String): String {
