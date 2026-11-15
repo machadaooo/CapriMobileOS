@@ -12,7 +12,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
 
-        <!-- Capa / Tela Inicial do App -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -22,12 +21,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Serviço Flutuante da Capri (Visual, Voz, Microfone, Memória Local, Tavily e IA Qwen) -->
         <service
             android:name=".CapriOverlayService"
             android:exported="false" />
 
-        <!-- Serviço de Acessibilidade (Olhos da Capri na Tela, Apps, Sites e Jogos) -->
         <service
             android:name=".CapriAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
