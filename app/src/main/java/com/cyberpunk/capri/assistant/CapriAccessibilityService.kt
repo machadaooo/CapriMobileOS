@@ -9,7 +9,7 @@ class CapriAccessibilityService : AccessibilityService() {
 
     private var ultimoAppAberto: String = ""
     private var ultimoResumoObservado: String = ""
-    private var ultimoComentarioMs: Long = 0L
+    private var ultimoDisparoContextoMs: Long = 0L
     private var inicioSessaoAtualMs: Long = 0L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -18,6 +18,11 @@ class CapriAccessibilityService : AccessibilityService() {
         val pacote = event.packageName?.toString() ?: return
         if (pacote == packageName || pacote == "com.android.systemui") return
 
+        val agora = System.currentTimeMillis()
+
+        // COOLDOWN DE 2 MINUTOS (120.000 ms): Silêncio obrigatório entre falas automáticas
+        if (agora - ultimoDisparoContextoMs < 120_000L) return
+
         val rootNode: AccessibilityNodeInfo = rootInActiveWindow ?: return
         val textoBuilder = StringBuilder()
         extrairTextos(rootNode, textoBuilder)
@@ -25,43 +30,42 @@ class CapriAccessibilityService : AccessibilityService() {
 
         val textoTela = textoBuilder.toString().trim()
         val nomeApp = traduzirNomeApp(pacote)
-        val agora = System.currentTimeMillis()
         val horaAtual = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
 
         if (textoTela.isNotBlank()) {
-            CapriOverlayService.contextoAtualTela = textoTela.take(450)
+            CapriOverlayService.contextoAtualTela = textoTela.take(400)
         }
         CapriOverlayService.appAtual = nomeApp
 
+        // 1. Mudança de App
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && pacote != ultimoAppAberto) {
             ultimoAppAberto = pacote
             inicioSessaoAtualMs = agora
-            ultimoComentarioMs = agora
+            ultimoDisparoContextoMs = agora
 
-            val trechoTela = if (textoTela.isNotBlank()) "Na tela aparece: '${textoTela.take(250)}'." else ""
+            val trechoTela = if (textoTela.isNotBlank()) "Na tela aparece: '${textoTela.take(200)}'." else ""
             CapriOverlayService.dispararEventoProativo(
-                "[CONTEXTO ATUAL] São ${horaAtual}h. O usuário acabou de abrir '$nomeApp'. $trechoTela Reaja de forma espontânea, humana e variada ao que ele está fazendo ou vendo."
+                "[CONTEXTO] São ${horaAtual}h. O usuário abriu '$nomeApp'. $trechoTela Faça apenas uma tirada curta e direta, se achar necessário."
             )
             return
         }
 
-        val resumoAtual = textoTela.take(180)
-        val conteudoMudouBastante = resumoAtual.length > 20 && resumoAtual != ultimoResumoObservado
+        // 2. Mudança substancial de conteúdo dentro do mesmo app
+        val resumoAtual = textoTela.take(150)
+        val conteudoMudouBastante = resumoAtual.length > 30 && resumoAtual != ultimoResumoObservado
 
-        if (conteudoMudouBastante && (agora - ultimoComentarioMs > 75_000L)) {
+        if (conteudoMudouBastante) {
             ultimoResumoObservado = resumoAtual
-            ultimoComentarioMs = agora
-            val minutosNoApp = ((agora - inicioSessaoAtualMs) / 60_000L).toInt()
-            val pistaTempo = if (minutosNoApp >= 25) "Ele já está nesse app há uns $minutosNoApp minutos." else ""
+            ultimoDisparoContextoMs = agora
 
             CapriOverlayService.dispararEventoProativo(
-                "[CONTEXTO ATUAL] São ${horaAtual}h. O usuário está em '$nomeApp'. $pistaTempo O que aparece na tela agora é: '${textoTela.take(320)}'. Reaja livremente a qualquer detalhe interessante, engraçado, curioso ou aleatório disso."
+                "[CONTEXTO] O usuário está em '$nomeApp'. O que aparece agora é: '${textoTela.take(250)}'. Comente de forma ultra curta e direta."
             )
         }
     }
 
     private fun extrairTextos(node: AccessibilityNodeInfo, builder: StringBuilder) {
-        if (builder.length > 500) return
+        if (builder.length > 400) return
         if (node.text != null && node.text.isNotBlank()) {
             builder.append(node.text).append(" ")
         }
